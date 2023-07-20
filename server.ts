@@ -1,5 +1,9 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import express from "express";
+import bcrypt from "bcryptjs";
+import jwt, { Secret, JwtPayload } from "jsonwebtoken";
+import { json } from "body-parser";
+import { JsonWebTokenError } from "jsonwebtoken";
 
 const prisma = new PrismaClient();
 var router = express.Router();
@@ -22,6 +26,62 @@ const transporter = nodemailer.createTransport({
 
 router.get("/", function (req: express.Request, res: express.Response) {
   res.send("Hello World");
+});
+
+router.post("/register", async (req: express.Request, res: express.Response) => {
+
+  // Our register logic starts here
+  try {
+    // Get user input
+    const {email , password , name , password_confirmation} = req.body;
+
+    // Validate user input
+    if (!(email && password && name && password_confirmation)) {
+      res.status(400).send("All input is required");
+    }
+
+    // check if user already exist
+    // Validate if user exist in our database
+    const oldUser = await prisma.users.findUnique({where: {
+      id: parseInt(req.params.id),
+    },});
+
+    if (oldUser) {
+      return res.status(409).send("User Already Exist. Please Login");
+    }
+
+    //Encrypt user password
+    const encryptedPassword = await bcrypt.hash(req.body.password, 10);
+
+    // Create user in our database
+    const user = await prisma.users.create({
+      data: {
+        name: req.body.name,
+        email: req.body.email,
+        password: encryptedPassword
+      },
+    });
+    const SECRET_KEY: Secret = "jdfgsdhgfuhdfgv35426754ytf6ev5";
+    // Create token
+    const token = jwt.sign({ _id: user.id?.toString(), name: user.name }, SECRET_KEY, {
+      expiresIn: '2 days',
+    });
+    // const token = jwt.sign({
+    //   payload: { 
+    //     user_id: user.id?.toString, 
+    //     user_email: user.email 
+    //   },
+    //   Secret: jwt.Secret
+    // });
+    // save user token
+    user.remember_token = token;
+
+    // return new user
+    res.status(201).json(user);
+  } catch (err) {
+    console.log(err);
+  }
+  // Our register logic ends here
 });
 
 // products
