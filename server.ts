@@ -4,13 +4,19 @@ import bcrypt from "bcryptjs";
 import jwt, { Secret, JwtPayload } from "jsonwebtoken";
 import { json } from "body-parser";
 import { JsonWebTokenError } from "jsonwebtoken";
+import cors from "cors";
+
+var validateToken = require("./token.ts");
+
+
 
 const prisma = new PrismaClient();
 var router = express.Router();
 var app = express();
 const bodyParser = require("body-parser");
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json({limit: '50mb'}));
+app.use(bodyParser.json({ limit: "50mb" }));
+app.use(cors());
 
 const nodemailer = require("nodemailer");
 
@@ -28,74 +34,178 @@ router.get("/", function (req: express.Request, res: express.Response) {
   res.send("Hello World");
 });
 
-router.post("/register", async (req: express.Request, res: express.Response) => {
-
+router.post("/login", async (req: express.Request, res: express.Response) => {
   // Our register logic starts here
   try {
     // Get user input
-    const {email , password , name , password_confirmation} = req.body;
+    const { email, password } = req.body;
 
     // Validate user input
-    if (!(email && password && name && password_confirmation)) {
-      res.status(400).send("All input is required");
+    if (!(email && password)) {
+      return (
+        res
+          // .status(400)
+          .send({ message: "Please Fill all details", status: 400, data: {} })
+      );
     }
 
     // check if user already exist
     // Validate if user exist in our database
-    const oldUser = await prisma.users.findUnique({where: {
-      id: parseInt(req.params.id),
-    },});
+    const User = await prisma.users.findUnique({
+      where: {
+        email: req.body.email,
+      },
+    });
 
-    if (oldUser) {
-      return res.status(409).send("User Already Exist. Please Login");
+    if (User) {
+      // bcrypt.compare(User.password,req.body.password)
+      const verifyPass = await bcrypt.compare(req.body.password, User.password);
+      if (verifyPass) {
+        const SECRET_KEY: Secret = "jdfgsdhgfuhdfgv35426754ytf6ev5";
+        // Create token
+        const token = jwt.sign(
+          { _id: User.id?.toString(), name: User.name,email: User.email },
+          SECRET_KEY,
+          {
+            expiresIn: "2 days",
+          }
+        );
+        User.remember_token = token;
+
+        // return new user
+        return res.status(201).json(User);
+      } else {
+        return (
+          res
+            // .status(409)
+            .send({ message: "Invalid Credentials.", status: 401, data: {} })
+        );
+      }
+      return (
+        res
+          // .status(409)
+          .send({
+            message: "User Already Exist. Please Login",
+            status: 401,
+            data: {},
+          })
+      );
+    } else {
+      return (
+        res
+          // .status(409)
+          .send({
+            message: "User Doesn't Exist. Please Register",
+            status: 401,
+            data: {},
+          })
+      );
     }
 
     //Encrypt user password
-    const encryptedPassword = await bcrypt.hash(req.body.password, 10);
+    // const encryptedPassword = await bcrypt.hash(req.body.password, 10);
 
-    // Create user in our database
-    const user = await prisma.users.create({
-      data: {
-        name: req.body.name,
-        email: req.body.email,
-        password: encryptedPassword
-      },
-    });
-    const SECRET_KEY: Secret = "jdfgsdhgfuhdfgv35426754ytf6ev5";
-    // Create token
-    const token = jwt.sign({ _id: user.id?.toString(), name: user.name }, SECRET_KEY, {
-      expiresIn: '2 days',
-    });
-    // const token = jwt.sign({
-    //   payload: { 
-    //     user_id: user.id?.toString, 
-    //     user_email: user.email 
+    // // Create user in our database
+    // const user = await prisma.users.create({
+    //   data: {
+    //     name: req.body.name,
+    //     email: req.body.email,
+    //     password: encryptedPassword,
     //   },
-    //   Secret: jwt.Secret
     // });
-    // save user token
-    user.remember_token = token;
+    // const SECRET_KEY: Secret = "jdfgsdhgfuhdfgv35426754ytf6ev5";
+    // // Create token
+    // const token = jwt.sign(
+    //   { _id: user.id?.toString(), name: user.name },
+    //   SECRET_KEY,
+    //   {
+    //     expiresIn: "2 days",
+    //   }
+    // );
+    // user.remember_token = token;
 
-    // return new user
-    res.status(201).json(user);
+    // // return new user
+    // res.status(201).json(user);
   } catch (err) {
     console.log(err);
   }
   // Our register logic ends here
 });
 
+router.post(
+  "/register",
+  async (req: express.Request, res: express.Response) => {
+    // Our register logic starts here
+    try {
+      // Get user input
+      const { name, email, password } = req.body;
+
+      // Validate user input
+      if (!(email && password && name )) {
+        res.status(400).send("All input is required");
+      }
+
+      // check if user already exist
+      // Validate if user exist in our database
+      const oldUser = await prisma.users.findUnique({
+        where: {
+          email: req.body.email,
+        },
+      });
+
+      if (oldUser) {
+        return res.status(409).send("User Already Exist. Please Login");
+      }
+
+      //Encrypt user password
+      const encryptedPassword = await bcrypt.hash(req.body.password, 10);
+
+      // Create user in our database
+      const user = await prisma.users.create({
+        data: {
+          name: req.body.name,
+          email: req.body.email,
+          password: encryptedPassword,
+        },
+      });
+      const SECRET_KEY: Secret = "jdfgsdhgfuhdfgv35426754ytf6ev5";
+      // Create token
+      const token = jwt.sign(
+        { _id: user.id?.toString(), name: user.name, email:user.email },
+        SECRET_KEY,
+        {
+          expiresIn: "2 days",
+        }
+      );
+      user.remember_token = token;
+
+      // return new user
+      res.status(201).json(user);
+    } catch (err) {
+      console.log(err);
+    }
+    // Our register logic ends here
+  }
+);
+
 // products
 // get all products
 router.get(
-  "/products",
+  "/products", 
+  validateToken,
   async function (req: express.Request, res: express.Response) {
     const productsWithImages = await prisma.product.findMany({
       include: {
         images: true,
       },
     });
+    const data = {
+      message: "All Products Fetched Successfully",
+      status: 200,
+      data: productsWithImages,
+    };
     // console.dir(productsWithImages, { depth: null });
-    res.send(JSON.stringify(productsWithImages));
+    res.send(JSON.stringify(data));
   }
 );
 // get product by id
@@ -107,8 +217,13 @@ router.get(
         id: parseInt(req.params.id),
       },
     });
+    const data = {
+      message: "Product Fetched Successfully",
+      status: 200,
+      data: productWithImages,
+    };
     // console.dir(productsWithImages, { depth: null });
-    res.send(JSON.stringify(productWithImages));
+    res.send(JSON.stringify(data));
   }
 );
 // insert product
@@ -129,7 +244,13 @@ router.post(
         },
       },
     });
-    res.send(JSON.stringify(createProduct));
+    const data = {
+      message: "Product Created Successfully",
+      status: 200,
+      data: createProduct,
+    };
+    // console.dir(productsWithImages, { depth: null });
+    res.send(JSON.stringify(data));
   }
 );
 // update product by id
@@ -140,7 +261,7 @@ router.put(
       where: {
         id: parseInt(req.params.id),
       },
-      data:{
+      data: {
         name: req.body.name,
         in_stock: req.body.in_stock,
         category: req.body.category,
@@ -150,9 +271,15 @@ router.put(
             file_name: req.body.fileList,
           },
         },
-      }
+      },
     });
-    res.send(JSON.stringify(updateProduct));
+    const data = {
+      message: "Product Updated Successfully",
+      status: 200,
+      data: updateProduct,
+    };
+    // console.dir(productsWithImages, { depth: null });
+    res.send(JSON.stringify(data));
   }
 );
 
@@ -194,7 +321,13 @@ router.post("/mail", async (req: express.Request, res: express.Response) => {
   console.log("Message sent: %s", info.messageId);
   // const data = req.query;
   // console.log(data);
-  res.send(JSON.stringify(req.body));
+  const data = {
+    message: "Email Sent Successfully",
+    status: 200,
+    data: req.body,
+  };
+  // console.dir(productsWithImages, { depth: null });
+  res.send(JSON.stringify(data));
 });
 
 app.use("/api/", router);

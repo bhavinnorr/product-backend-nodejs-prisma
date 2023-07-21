@@ -42,7 +42,7 @@ model Users{
   email String @unique
   email_verified_at String?
   password String
-  remember_token String?
+  remember_token String? @unique
   created_at DateTime @default(now())
   updated_at DateTime?
 
