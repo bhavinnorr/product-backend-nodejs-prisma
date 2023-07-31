@@ -3,7 +3,6 @@ import dotenv from "dotenv";
 import { PrismaClient, Prisma } from "@prisma/client";
 import jwtDecode from "jwt-decode";
 import express from "express";
-import { Json } from "sequelize/types/utils";
 dotenv.config();
 const prisma = new PrismaClient();
 
